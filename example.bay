@@ -1,0 +1,6 @@
+[target:all]
+fetch -git url:https://github.com/Geal/nom f:plugins/nom;
+traverse f:plugins/nom {
+    run "cargo build --release";
+};
+
