@@ -1,3 +1,4 @@
+use std::fs;
 use log::{info, error};
 
 mod base;
@@ -37,8 +38,12 @@ fn main() {
         Ok(()) => info!(target: "logger", "Initialised logger"),
         Err(e) => println!("Could not initialise logger: {}", e),
     };
-    let input = "[target:all] fetch -git url:github.com; run \"git clone github.com\";";
-    let chunks = match parsebayfile(input) {
+    // let input = "[target:all] fetch -git url:github.com; run \"git clone github.com\";";
+    let input = match fs::read_to_string("example.bay") {
+        Ok(s) => s,
+        Err(e) => {error!(target: "input", "Could not read from file example.bay: {}", e); return},
+    };
+    let chunks = match parsebayfile(input.as_str()) {
         Ok((_, c)) => c,
         Err(e) => {error!(target: "parser", "Parsing of chunks failed: {}", e); return},
     };

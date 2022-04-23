@@ -3,7 +3,7 @@ use nom::{
     error::{Error, ErrorKind},
     branch::alt,
     multi::{many0, many0_count, many_till},
-    combinator::recognize,
+    combinator::{recognize, peek, eof},
     sequence::{delimited, pair, separated_pair, preceded},
     character::complete::{self, alpha1, alphanumeric1, multispace0, anychar, none_of},
     bytes::complete::{take, tag},
@@ -45,7 +45,6 @@ pub fn till_unescaped_quote(input: &str) -> IResult<&str, &str> {
 }
 
 pub fn value(input: &str) -> IResult<&str, Value> {
-    let (input, _) = multispace0(input)?;
     if let Ok((s, c)) = take::<usize, &str, Error<&str>>(1usize)(input) {
         match c {
             "\"" => {
@@ -60,13 +59,14 @@ pub fn value(input: &str) -> IResult<&str, Value> {
             },
             "{" => {
                 // It's a command block
-                let value = delimited(complete::char('{'), many0(command), complete::char('}'))(input)?;
+                let value = delimited(complete::char('{'), preceded(multispace0, many0(command)), complete::char('}'))(input)?;
                 return Ok((value.0, Value::BLOCK(value.1)));
             },
             _ => {},
         }
     }
     let (o, (t,v)) = separated_pair(identifier, complete::char(':'), till_unescaped_ws_or_sc)(input)?;
+    let (o, _) = multispace0(o)?;
     match t {
         "f" => return Ok((o, Value::FPATH(v.to_string()))),
         "url" => return Ok((o, Value::URL(v.to_string()))),
@@ -76,9 +76,16 @@ pub fn value(input: &str) -> IResult<&str, Value> {
 }
 
 pub fn chunk(input: &str) -> IResult<&str, Chunk> {
-    let (input, _) = multispace0(input)?;
     let (i, (t,s)) = delimited(complete::char('['), separated_pair(identifier, complete::char(':'), identifier), complete::char(']'))(input)?;
-    let (o, cmds) = many0(command)(i)?;
+    let (i, _) = multispace0(i)?;
+    let (o, (cmds, _)) = many_till(command, peek(
+            preceded(
+                multispace0,
+                alt((
+                    tag("["),
+                    eof)),
+            )
+            ))(i)?;
     Ok((o, match t {
         "target" => {
             Chunk::new(ChunkType::TARGET, s.to_string(), cmds)
@@ -88,8 +95,8 @@ pub fn chunk(input: &str) -> IResult<&str, Chunk> {
 }
 
 pub fn command(input: &str) -> IResult<&str, Command> {
-    let (input, _) = multispace0(input)?;
-    let (o, (i, (args, _))) = pair(identifier, many_till(value, complete::char(';')))(input)?;
+    let (o, (i, (args, _))) = pair(identifier, many_till(preceded(multispace0, value), complete::char(';')))(input)?;
+    let (o, _) = multispace0(o)?;
     Ok((o, Command::new(match i {
         "fetch" => commands::fetch,
         "traverse" => commands::traverse,
